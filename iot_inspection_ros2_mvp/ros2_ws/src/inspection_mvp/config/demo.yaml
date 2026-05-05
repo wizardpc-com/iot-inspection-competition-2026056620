@@ -1,0 +1,22 @@
+image_source_node:
+  ros__parameters:
+    image_dir: "../demo_images"
+    publish_interval: 2.0
+    loop_images: true
+
+crack_detector_node:
+  ros__parameters:
+    model_path: "../models/best.pt"
+    conf_threshold: 0.5
+    output_dir: "../outputs/annotated"
+
+inspection_manager_node:
+  ros__parameters:
+    normal_speed: 0.1
+
+meter_stub_node:
+  ros__parameters:
+    publish_interval: 5.0
+    station_id: "P001"
+    meter_value: 220.0
+    status: "normal"

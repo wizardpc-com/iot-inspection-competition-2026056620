@@ -1,0 +1,5 @@
+运行环境与依赖说明
+
+推荐环境：Windows + WSL2 Ubuntu 22.04 或原生 Ubuntu 22.04，ROS2 Humble，Python 3.10。
+
+主要依赖：rclpy、std_msgs、geometry_msgs、ament_python、colcon、ultralytics、torch、opencv-python、numpy、pyyaml。

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ROS2 / colcon
+iot_inspection_ros2_mvp/ros2_ws/build/
+iot_inspection_ros2_mvp/ros2_ws/install/
+iot_inspection_ros2_mvp/ros2_ws/log/
+iot_inspection_ros2_mvp/runs/
+**/build/
+**/install/
+**/log/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Generated archives
+*.zip
+
+# Generated competition package staging area
+2026056620-参赛总文件夹/2026056620-02 素材和源码/source_package/
