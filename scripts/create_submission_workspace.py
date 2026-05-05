@@ -73,7 +73,7 @@ def sync_source_package() -> None:
     for name in ["README.md", "requirements.txt", ".gitignore"]:
         copy_if_exists(SOURCE_PROJECT / name, project_dst / name)
 
-    for dirname in ["docs", "demo_images", "models"]:
+    for dirname in ["docs", "demo_images", "models", "scripts"]:
         src = SOURCE_PROJECT / dirname
         if src.exists():
             shutil.copytree(src, project_dst / dirname, ignore=ignore_generated)
@@ -81,23 +81,23 @@ def sync_source_package() -> None:
     outputs_dst = project_dst / "outputs"
     outputs_dst.mkdir(parents=True, exist_ok=True)
     copy_if_exists(SOURCE_PROJECT / "outputs" / "README.md", outputs_dst / "README.md")
-    annotated_dst = outputs_dst / "annotated"
-    annotated_dst.mkdir(parents=True, exist_ok=True)
-    annotated_src = SOURCE_PROJECT / "outputs" / "annotated"
-    if annotated_src.exists():
-        copied = 0
-        for item in sorted(annotated_src.iterdir()):
-            if item.is_file() and item.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                shutil.copy2(item, annotated_dst / item.name)
-                copied += 1
-                if copied >= 5:
-                    break
-    write(
-        annotated_dst / "README.txt",
-        """
-        本目录保存 ROS2 MVP 运行后生成的裂缝检测标注图。演示时可展示该目录中的图片与 /vision/crack_result 话题输出。
-        """,
-    )
+    for output_name, description in [
+        ("annotated", "裂缝检测标注图"),
+        ("meter_annotated", "仪表关键部件检测标注图"),
+    ]:
+        dst_dir = outputs_dst / output_name
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        src_dir = SOURCE_PROJECT / "outputs" / output_name
+        copy_if_exists(src_dir / "README.md", dst_dir / "README.md")
+        if src_dir.exists():
+            copied = 0
+            for item in sorted(src_dir.iterdir()):
+                if item.is_file() and item.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    shutil.copy2(item, dst_dir / item.name)
+                    copied += 1
+                    if copied >= 5:
+                        break
+        write(dst_dir / "README.txt", f"本目录保存 ROS2 MVP 运行后生成的{description}。")
 
     ros_pkg_src = SOURCE_PROJECT / "ros2_ws" / "src" / "inspection_mvp"
     ros_pkg_dst = project_dst / "ros2_ws" / "src" / "inspection_mvp"
@@ -125,7 +125,7 @@ def write_submission_docs() -> None:
         作品名称：{WORK_NAME}
         作品类别：{CATEGORY}
 
-        本目录保存中国大学生计算机设计大赛物联网应用类作品材料。当前作品为 ROS2 仿真系统与电力场景 AI 视觉识别原型，已完成图像输入、裂缝识别、ROS2结果发布、巡检状态判断、模拟运动反馈和结果保存的核心闭环。
+        本目录保存中国大学生计算机设计大赛物联网应用类作品材料。当前作品为 ROS2 仿真系统与电力场景 AI 视觉识别原型，已完成图像输入、裂缝识别、仪表关键部件检测接入、ROS2结果发布、巡检状态判断、模拟运动反馈和结果保存的核心闭环。
         """,
     )
     write(
@@ -162,14 +162,14 @@ def write_submission_docs() -> None:
         2. 项目背景：电力巡检中管道、设备和仪表状态监测需求。
         3. 场景痛点：人工巡检效率、记录一致性和异常响应问题。
         4. 当前版本目标：完成 ROS2 仿真系统与 AI视觉识别闭环。
-        5. 系统总体方案：图像输入、裂缝识别、状态管理、模拟运动反馈。
-        6. ROS2节点架构：image_source_node、crack_detector_node、inspection_manager_node、fake_base_node、meter_stub_node。
-        7. 裂缝识别模块：best.pt 接入、/vision/crack_result 输出、结果图保存。
-        8. 巡检状态管理：NORMAL / ALERT 规则和 /cmd_vel 停止指令。
-        9. 运行展示：ros2 launch、topic echo、outputs/annotated。
-        10. 测试结果：模型加载、图片输入、话题通信、状态判断、运动反馈、结果保存。
-        11. 创新点与扩展：ROS2模块化、AI节点化、闭环验证、真实硬件接口扩展。
-        12. 团队分工与总结：严睿清、张昌辉、刘安祺分工与作品总结。
+        5. 系统总体方案：图像输入、裂缝识别、仪表关键部件检测、状态管理、模拟运动反馈。
+        6. ROS2节点架构：image_source_node、crack_detector_node、meter_detector_node、meter_stub_node、inspection_manager_node、fake_base_node。
+        7. 裂缝识别模块：crack_best.pt 接入、/vision/crack_result 输出、结果图保存。
+        8. 仪表检测模块：meter_best.pt 接入、/vision/meter_result 输出、读数换算后续扩展。
+        9. 巡检状态管理：NORMAL / ALERT / CHECK_METER 规则和 /cmd_vel 指令。
+        10. 运行展示：ros2 launch、topic echo、outputs/annotated、outputs/meter_annotated。
+        11. 测试结果：模型加载、图片输入、话题通信、状态判断、运动反馈、结果保存。
+        12. 创新点与扩展：ROS2模块化、AI节点化、双视觉分支接入、真实硬件接口扩展。
         """,
     )
     write(
@@ -188,7 +188,7 @@ def write_submission_docs() -> None:
             ↓ /cmd_vel
         fake_base_node
 
-        meter_stub_node
+        meter_stub_node 或 meter_detector_node
             ↓ /vision/meter_result
         inspection_manager_node
         ```
@@ -243,7 +243,8 @@ def write_submission_docs() -> None:
         ros2 topic echo /inspection/report --once
         ```
 
-        模型放置：iot_inspection_ros2_mvp/models/best.pt
+        裂缝模型放置：iot_inspection_ros2_mvp/models/crack_best.pt
+        仪表模型放置：iot_inspection_ros2_mvp/models/meter_best.pt
         图片放置：iot_inspection_ros2_mvp/demo_images/
         结果目录：iot_inspection_ros2_mvp/outputs/annotated/
         """,
@@ -253,7 +254,7 @@ def write_submission_docs() -> None:
         """
         开源组件与版权说明
 
-        本作品使用 ROS2 Humble、rclpy、std_msgs、geometry_msgs、Ultralytics YOLO、torch、OpenCV、NumPy、PyYAML 等开源组件。best.pt 模型权重、demo_images 图片和演示视频素材由团队统一管理，用于本作品演示和评审材料。
+        本作品使用 ROS2 Humble、rclpy、std_msgs、geometry_msgs、Ultralytics YOLO、torch、OpenCV、NumPy、PyYAML 等开源组件。crack_best.pt、meter_best.pt、demo_images 图片和演示视频素材由团队统一管理，用于本作品演示和评审材料。
         """,
     )
     write(
@@ -279,23 +280,23 @@ def write_submission_docs() -> None:
 
         ## 作品简介
 
-        本作品面向电力巡检场景，构建基于 ROS2 的智能巡检原型，实现图片输入、YOLO裂缝识别、巡检状态判断、模拟运动反馈和结果保存的闭环验证。
+        本作品面向电力巡检场景，构建基于 ROS2 的智能巡检原型，实现图片输入、YOLO裂缝识别、仪表关键部件检测、巡检状态判断、模拟运动反馈和结果保存的闭环验证。
 
         ## 创新描述
 
-        作品将裂缝识别模型节点化接入 ROS2，通过话题机制联通图像输入、AI识别、状态管理和运动反馈，并为仪表识别、真实底盘和边缘部署预留接口。
+        作品将裂缝识别模型和仪表关键部件检测模型节点化接入 ROS2，通过话题机制联通图像输入、AI识别、状态管理和运动反馈，并为仪表读数换算、真实底盘和边缘部署预留接口。
 
         ## 当前完成内容
 
-        系统包含 image_source_node、crack_detector_node、inspection_manager_node、fake_base_node、meter_stub_node 五个节点，完成 /inspection/image_path、/vision/crack_result、/inspection/state、/inspection/report、/cmd_vel 等关键话题通信。
+        系统包含 image_source_node、crack_detector_node、meter_detector_node、meter_stub_node、inspection_manager_node、fake_base_node 等节点，完成 /inspection/image_path、/vision/crack_result、/vision/meter_result、/inspection/state、/inspection/report、/cmd_vel 等关键话题通信。
 
         ## 团队分工
 
         | 成员 | 分工 |
         |---|---|
         | 严睿清 | 项目总体方案、ROS2系统架构、节点通信设计、巡检任务状态管理、系统集成与材料统筹 |
-        | 张昌辉 | 裂缝识别模型、best.pt 模型训练与测试、裂缝检测样例图、模型推理脚本和结果说明 |
-        | 刘安祺 | 仪表识别方向、仪表识别接口方案、电力场景素材和文档整理 |
+        | 张昌辉 | 裂缝识别模型、crack_best.pt 模型训练与测试、裂缝检测样例图、模型推理脚本和结果说明 |
+        | 刘安祺 | 仪表关键部件检测方向、仪表识别接口方案、电力场景素材和文档整理 |
 
         ## 开发与运行平台
 
@@ -309,27 +310,32 @@ def write_submission_docs() -> None:
 
         ## 作品概述
 
-        本作品当前版本聚焦“地面巡检小车 + AI视觉识别 + ROS2通信与任务管理”的最小可运行原型。系统重点验证图像输入、AI裂缝识别、ROS2结果发布、巡检状态判断、模拟运动反馈和结果保存。
+        本作品当前版本聚焦“地面巡检小车 + AI视觉识别 + ROS2通信与任务管理”的最小可运行原型。系统重点验证图像输入、AI裂缝识别、仪表关键部件检测、ROS2结果发布、巡检状态判断、模拟运动反馈和结果保存。
 
         ## 需求分析
 
-        电力巡检需要对管道裂缝、设备状态和仪表信息进行记录。当前版本使用本地图片模拟巡检输入，通过 YOLO 模型完成管道裂缝识别，通过 ROS2 话题完成模块解耦和状态反馈。
+        电力巡检需要对管道裂缝、设备状态和仪表信息进行记录。当前版本使用本地图片模拟巡检输入，通过 YOLO 模型完成管道裂缝识别和仪表关键部件检测，通过 ROS2 话题完成模块解耦和状态反馈。
 
         ## 技术方案
 
         - image_source_node 发布 /inspection/image_path。
-        - crack_detector_node 加载 models/best.pt，发布 /vision/crack_result。
+        - crack_detector_node 加载 models/crack_best.pt，发布 /vision/crack_result。
         - inspection_manager_node 发布 /inspection/state、/inspection/report、/cmd_vel。
         - fake_base_node 订阅 /cmd_vel 并模拟小车前进或停止。
-        - meter_stub_node 发布 /vision/meter_result，预留仪表识别接口。
+        - meter_stub_node 默认发布 /vision/meter_result，提供兼容演示模式。
+        - meter_detector_node 可加载 meter_best.pt，发布仪表关键部件检测结果。
 
         ## 裂缝识别节点
 
-        crack_detector_node 在启动时加载 best.pt，收到图片路径后调用 Ultralytics YOLO 推理，输出 detected、bbox、conf、class_name、annotated_image_path 等字段，并将标注图保存到 outputs/annotated。
+        crack_detector_node 在启动时加载 crack_best.pt，收到图片路径后调用 Ultralytics YOLO 推理，输出 detected、bbox、conf、class_name、annotated_image_path 等字段，并将标注图保存到 outputs/annotated。
+
+        ## 仪表关键部件检测节点
+
+        meter_detector_node 在 use_meter_stub:=false 时启动，加载 meter_best.pt 并检测仪表盘区域、指针、刻度等关键部件。节点发布 /vision/meter_result，并将结果图保存到 outputs/meter_annotated。当前读数基于 base/start/end/tip 检测框中心点与配置量程进行估算。
 
         ## 状态判断逻辑
 
-        inspection_manager_node 根据 detected、max_conf 和 threshold 判断巡检状态。检测到裂缝且置信度达到阈值时进入 ALERT，并通过 /cmd_vel 发布停止指令；否则为 NORMAL。
+        inspection_manager_node 保持裂缝优先逻辑。检测到裂缝且置信度达到阈值时进入 ALERT，并通过 /cmd_vel 发布停止指令；若仪表关键部件检测结果为 error 或 needs_review，则进入 CHECK_METER；其他情况为 NORMAL。
 
         ## 当前边界与扩展
 
@@ -359,16 +365,17 @@ def write_submission_docs() -> None:
 
         | 编号 | 测试项 | 测试方法 | 结果 |
         |---|---|---|---|
-        | T01 | 模型加载测试 | 启动 crack_detector_node | best.pt 在节点启动时加载 |
+        | T01 | 模型加载测试 | 启动 crack_detector_node | crack_best.pt 在节点启动时加载 |
         | T02 | 图片输入测试 | echo /inspection/image_path | image_source_node 发布图片路径 JSON |
         | T03 | 裂缝识别测试 | echo /vision/crack_result | 输出 detected、bbox、conf、max_conf、annotated_image_path |
         | T04 | ROS2话题通信测试 | ros2 topic list | 关键节点与话题可见 |
         | T05 | 巡检状态判断测试 | echo /inspection/state | 系统输出 NORMAL 或 ALERT |
         | T06 | 运动反馈接口测试 | echo /cmd_vel | ALERT 时发布零速度停止指令 |
         | T07 | 结果图保存测试 | 查看 outputs/annotated | 生成带检测框的结果图 |
-        | T08 | 仪表接口测试 | echo /vision/meter_result | meter_stub_node 发布模拟仪表识别结果 |
+        | T08 | 仪表兼容模式测试 | echo /vision/meter_result | meter_stub_node 发布兼容仪表结果 |
+        | T09 | 仪表检测分支测试 | use_meter_stub:=false 后 echo /vision/meter_result | meter_detector_node 发布仪表关键部件检测结果 |
 
-        测试结论：当前 ROS2 仿真系统完成图像输入、裂缝识别、状态判断、模拟运动反馈和结果图保存闭环。
+        测试结论：当前 ROS2 仿真系统完成图像输入、裂缝识别、仪表关键部件检测接入、状态判断、模拟运动反馈和结果图保存闭环。
         """,
     )
 
@@ -377,9 +384,9 @@ def write_submission_docs() -> None:
         """
         # 作品演示视频提交说明
 
-        演示视频建议为 MP4，时长 5-8 分钟，展示项目背景、系统方案、ROS2节点架构、ros2 launch 启动、裂缝识别结果、topic echo、ALERT 状态、模拟小车停止和结果图保存。
+        演示视频建议为 MP4，时长 5-8 分钟，展示项目背景、系统方案、ROS2节点架构、ros2 launch 启动、裂缝识别结果、仪表关键部件检测结果、topic echo、ALERT 状态、CHECK_METER 状态、模拟小车停止和结果图保存。
 
-        视频展示内容以当前 ROS2 仿真系统和 AI视觉识别原型为准。真实小车、摄像头、K230、激光雷达定位和空地协同作为后续扩展方向展示。
+        视频展示内容以当前 ROS2 仿真系统和 AI视觉识别原型为准。仪表分支当前完成关键部件检测接入，读数换算作为后续扩展方向展示。
         """,
     )
     write(
@@ -391,12 +398,14 @@ def write_submission_docs() -> None:
         - ros2 launch 启动录屏。
         - ros2 topic list 截图。
         - /vision/crack_result 输出截图。
+        - /vision/meter_result 输出截图。
         - /inspection/state 输出截图。
         - /inspection/report 输出截图。
         - /cmd_vel 输出截图。
         - fake_base_node 模拟停止日志截图。
         - demo_images 原图。
         - outputs/annotated 带框结果图。
+        - outputs/meter_annotated 仪表关键部件检测结果图。
         - 系统节点架构图。
         """,
     )

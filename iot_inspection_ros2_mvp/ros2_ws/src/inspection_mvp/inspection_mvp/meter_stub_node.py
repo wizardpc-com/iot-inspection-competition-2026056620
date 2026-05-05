@@ -36,8 +36,17 @@ class MeterStubNode(Node):
         payload = {
             "station_id": self.station_id,
             "detected": True,
+            "detector_type": "meter_stub",
             "meter_value": self.meter_value,
             "status": self.status,
+            "meter_status": "structure_detected",
+            "reading_status": "stub_estimated",
+            "reading_value": self.meter_value,
+            "reading_unit": "unit",
+            "reading_ratio": None,
+            "reading_method": "stub_configured_value",
+            "reading_reason": "fallback_demo_value",
+            "reason": "stub_result_for_compatible_demo_mode",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         msg = String()

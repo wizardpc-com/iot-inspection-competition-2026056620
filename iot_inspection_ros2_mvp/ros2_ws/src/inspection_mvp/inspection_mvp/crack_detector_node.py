@@ -13,13 +13,20 @@ class CrackDetectorNode(Node):
 
     def __init__(self):
         super().__init__("crack_detector_node")
-        self.declare_parameter("model_path", "../models/best.pt")
+        self.declare_parameter("model_path", "../models/crack_best.pt")
+        self.declare_parameter("crack_model_path", "")
         self.declare_parameter("conf_threshold", 0.5)
         self.declare_parameter("output_dir", "../outputs/annotated")
 
-        self.model_path = self._resolve_path(
-            self.get_parameter("model_path").get_parameter_value().string_value
+        crack_model_path = (
+            self.get_parameter("crack_model_path").get_parameter_value().string_value
         )
+        if crack_model_path:
+            self.model_path = self._resolve_path(crack_model_path)
+        else:
+            self.model_path = self._resolve_path(
+                self.get_parameter("model_path").get_parameter_value().string_value
+            )
         self.conf_threshold = (
             self.get_parameter("conf_threshold").get_parameter_value().double_value
         )

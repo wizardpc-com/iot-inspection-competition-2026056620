@@ -1,0 +1,42 @@
+image_source_node:
+  ros__parameters:
+    image_dir: "../demo_images"
+    publish_interval: 2.0
+    loop_images: true
+
+crack_detector_node:
+  ros__parameters:
+    crack_model_path: "../models/crack_best.pt"
+    model_path: "../models/crack_best.pt"
+    conf_threshold: 0.5
+    output_dir: "../outputs/annotated"
+
+inspection_manager_node:
+  ros__parameters:
+    normal_speed: 0.1
+    use_meter_stub: true
+
+meter_stub_node:
+  ros__parameters:
+    use_meter_stub: true
+    publish_interval: 5.0
+    station_id: "P001"
+    meter_value: 220.0
+    status: "normal"
+
+meter_detector_node:
+  ros__parameters:
+    use_meter_stub: true
+    meter_model_path: "../models/meter_best.pt"
+    meter_last_model_path: "../models/meter_last.pt"
+    meter_conf_threshold: 0.5
+    meter_output_dir: "../outputs/meter_annotated"
+    meter_min_value: 0.0
+    meter_max_value: 100.0
+    meter_unit: "unit"
+    meter_angle_direction: "clockwise"
+    meter_required_classes:
+      - "base"
+      - "start"
+      - "end"
+      - "tip"

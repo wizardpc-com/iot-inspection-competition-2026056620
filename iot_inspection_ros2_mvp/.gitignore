@@ -5,4 +5,7 @@ ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
 
-outputs/annotated/
+outputs/annotated/*
+!outputs/annotated/README.md
+outputs/meter_annotated/*
+!outputs/meter_annotated/README.md

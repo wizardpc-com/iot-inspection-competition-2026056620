@@ -15,99 +15,79 @@ source /opt/ros/humble/setup.bash
 cd iot_inspection_ros2_mvp/ros2_ws
 colcon build
 source install/setup.bash
-ros2 pkg list | grep inspection_mvp
 ```
 
-## Model file not found
+## 裂缝模型不存在
 
-现象：
+确认裂缝模型位于：
 
 ```text
-YOLO model file not found
+iot_inspection_ros2_mvp/models/crack_best.pt
 ```
 
-处理：
+## 仪表模型不存在
 
-确认模型放在：
+默认 launch 使用 `meter_stub_node`，不会因为仪表模型缺失影响裂缝检测闭环。启用真实仪表分支前，请确认模型位于：
 
 ```text
-iot_inspection_ros2_mvp/models/best.pt
+iot_inspection_ros2_mvp/models/meter_best.pt
 ```
 
-如果模型放在其他位置，修改：
+启用真实仪表分支：
 
-```text
-ros2_ws/src/inspection_mvp/config/demo.yaml
+```bash
+ros2 launch inspection_mvp inspection_demo.launch.py use_meter_stub:=false
 ```
 
-## No demo images found
+## 仪表模型无法被 ultralytics 加载
 
-现象：
+节点会发布 `/vision/meter_result`，其中 `meter_status=error`、`reading_status=error`。裂缝检测闭环仍可继续运行。可使用原 YOLOv5 命令验证模型文件来源：
 
-```text
-No demo images found
+```bash
+python detect.py --weights best.pt --source 图片路径 --save-txt --save-conf
 ```
 
-处理：
+## 图片目录为空
 
-确认图片放在：
+把 `.jpg/.jpeg/.png` 图片放入：
 
 ```text
 iot_inspection_ros2_mvp/demo_images/
 ```
 
-支持格式：
+## 没有生成仪表结果图
 
-- `.jpg`
-- `.jpeg`
-- `.png`
+检查：
 
-## Ultralytics import failed
+- 是否使用 `use_meter_stub:=false` 启动。
+- `models/meter_best.pt` 是否存在。
+- `/vision/meter_result` 是否包含 `error` 字段。
+- `meter_output_dir` 是否配置为 `../outputs/meter_annotated`。
 
-现象：
+## 读数需要复核
 
-```text
-Failed to load YOLO model
+当前读数依赖 `base/start/end/tip` 四类关键部件。若关键部件缺失，`reading_status` 会显示 `needs_key_parts`，`reading_value` 为 `null`。处理方式是检查图片质量、模型输出类别、`meter_required_classes` 配置和量程参数。
+
+## 读数方向不符合预期
+
+调整配置：
+
+```yaml
+meter_angle_direction: "clockwise"
 ```
 
-处理：
+或：
 
-```bash
-cd iot_inspection_ros2_mvp
-python3 -m pip install -r requirements.txt
+```yaml
+meter_angle_direction: "counterclockwise"
 ```
 
-如果机器没有 GPU，也可以使用 CPU 推理，只是速度会慢一些。
+## 读数量程不符合实际仪表
 
-## No annotated image generated
+调整配置：
 
-可能原因：
-
-- 模型未加载成功
-- 图片路径不存在
-- 输出目录没有权限
-
-处理：
-
-确认 `outputs/annotated/` 可以创建，或在 `demo.yaml` 中修改 `output_dir`。
-
-## rqt_graph not available
-
-处理：
-
-```bash
-sudo apt install ros-humble-rqt-graph
-rqt_graph
+```yaml
+meter_min_value: 0.0
+meter_max_value: 100.0
+meter_unit: "unit"
 ```
-
-## Launch 后路径不对
-
-默认配置使用相对于 `ros2_ws` 的路径。建议按以下方式运行：
-
-```bash
-cd iot_inspection_ros2_mvp/ros2_ws
-source install/setup.bash
-ros2 launch inspection_mvp inspection_demo.launch.py
-```
-
-如果必须从其他目录运行，请用绝对路径覆盖参数或修改 `demo.yaml`。

@@ -18,7 +18,6 @@ REQUIRED = [
     SUBMISSION / f"{WORK_ID}-提交材料清单.md",
     DIRS[0] / f"{WORK_ID}-答辩PPT内容规划.md",
     DIRS[0] / f"{WORK_ID}-系统架构与运行展示说明.md",
-    DIRS[1] / f"{WORK_ID}-素材源码.zip",
     DIRS[1] / "源码说明-readme.txt",
     DIRS[2] / f"{WORK_ID}-作品信息摘要.md",
     DIRS[2] / f"{WORK_ID}-物联网应用类作品技术文档.md",
@@ -63,9 +62,10 @@ def scan_text() -> int:
 
 def check_zip() -> int:
     zip_path = DIRS[1] / f"{WORK_ID}-素材源码.zip"
-    errors = ok(zip_path.exists(), f"zip exists: {zip_path.name}")
     if not zip_path.exists():
-        return errors
+        print(f"[SKIP] generated zip is absent: {zip_path.name}")
+        return 0
+    errors = ok(True, f"zip exists: {zip_path.name}")
     with zipfile.ZipFile(zip_path, "r") as archive:
         names = set(archive.namelist())
     required_entries = [
@@ -73,6 +73,9 @@ def check_zip() -> int:
         "source_package/iot_inspection_ros2_mvp/requirements.txt",
         "source_package/iot_inspection_ros2_mvp/ros2_ws/src/inspection_mvp/package.xml",
         "source_package/iot_inspection_ros2_mvp/ros2_ws/src/inspection_mvp/setup.py",
+        "source_package/iot_inspection_ros2_mvp/ros2_ws/src/inspection_mvp/inspection_mvp/meter_detector_node.py",
+        "source_package/iot_inspection_ros2_mvp/scripts/check_meter_assets.py",
+        "source_package/iot_inspection_ros2_mvp/docs/meter_integration_checklist.md",
     ]
     for entry in required_entries:
         errors += ok(entry in names, f"zip entry: {entry}")

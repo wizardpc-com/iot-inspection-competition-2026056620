@@ -13,6 +13,7 @@ class InspectionManagerNode(Node):
     def __init__(self):
         super().__init__("inspection_manager_node")
         self.declare_parameter("normal_speed", 0.1)
+        self.declare_parameter("use_meter_stub", True)
         self.normal_speed = (
             self.get_parameter("normal_speed").get_parameter_value().double_value
         )
@@ -36,11 +37,12 @@ class InspectionManagerNode(Node):
     def _on_meter_result(self, msg):
         try:
             self.latest_meter = json.loads(msg.data)
+            meter_status = self._meter_status(self.latest_meter)
             self.get_logger().info(
                 "Meter result received. "
                 f"station_id={self.latest_meter.get('station_id')}, "
-                f"status={self.latest_meter.get('status')}, "
-                f"value={self.latest_meter.get('meter_value')}"
+                f"meter_status={meter_status}, "
+                f"reading_status={self.latest_meter.get('reading_status', 'not_available')}"
             )
         except json.JSONDecodeError as exc:
             self.get_logger().error(f"Invalid JSON on /vision/meter_result: {exc}")
@@ -57,11 +59,17 @@ class InspectionManagerNode(Node):
         max_conf = float(result.get("max_conf", 0.0))
         threshold = float(result.get("threshold", 0.5))
 
-        alert = detected and max_conf >= threshold
-        if alert:
+        crack_alert = detected and max_conf >= threshold
+        meter_status = self._meter_status(self.latest_meter)
+        if crack_alert:
             state = "ALERT"
             reason = f"Pipe crack detected, max_conf={max_conf:.4f} >= threshold={threshold:.4f}"
             suggested_action = "stop_robot_and_request_manual_check"
+            cmd = self._make_twist(0.0, 0.0)
+        elif meter_status in {"error", "needs_review"}:
+            state = "CHECK_METER"
+            reason = f"Meter key-part detection status requires review: meter_status={meter_status}"
+            suggested_action = "pause_and_review_meter_detection"
             cmd = self._make_twist(0.0, 0.0)
         else:
             state = "NORMAL"
@@ -97,12 +105,26 @@ class InspectionManagerNode(Node):
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.state_pub.publish(msg)
 
+    @staticmethod
+    def _meter_status(meter_result):
+        if not meter_result:
+            return "not_available"
+        return meter_result.get("meter_status") or meter_result.get("status") or "not_available"
+
     def _publish_report(self, crack_result, state_payload):
         meter_text = "meter=not_available"
         if self.latest_meter:
+            meter_status = self._meter_status(self.latest_meter)
+            meter_reason = self.latest_meter.get("reason", "")
+            reading_status = self.latest_meter.get("reading_status", "not_available")
+            reading_value = self.latest_meter.get("reading_value", None)
+            reading_unit = self.latest_meter.get("reading_unit", "")
             meter_text = (
-                f"meter_status={self.latest_meter.get('status')}, "
-                f"meter_value={self.latest_meter.get('meter_value')}"
+                f"meter_status={meter_status}, "
+                f"reading_status={reading_status}, "
+                f"reading_value={reading_value}, "
+                f"reading_unit={reading_unit}, "
+                f"meter_reason={meter_reason}"
             )
 
         report = (

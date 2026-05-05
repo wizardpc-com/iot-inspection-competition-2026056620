@@ -24,6 +24,7 @@ ros2 topic echo /inspection/state --once
 ros2 topic echo /inspection/report --once
 ```
 
-模型放置：iot_inspection_ros2_mvp/models/best.pt
+裂缝模型放置：iot_inspection_ros2_mvp/models/crack_best.pt
+仪表模型放置：iot_inspection_ros2_mvp/models/meter_best.pt
 图片放置：iot_inspection_ros2_mvp/demo_images/
 结果目录：iot_inspection_ros2_mvp/outputs/annotated/

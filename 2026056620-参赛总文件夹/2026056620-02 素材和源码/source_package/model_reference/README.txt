@@ -1,0 +1,1 @@
+本目录保存模型训练与原始推理流程参考文件。当前比赛系统的正式运行入口是 iot_inspection_ros2_mvp/ros2_ws/src/inspection_mvp。

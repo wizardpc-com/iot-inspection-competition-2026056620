@@ -21,9 +21,3 @@ iot_inspection_ros2_mvp/runs/
 # OS
 Thumbs.db
 .DS_Store
-
-# Generated archives
-*.zip
-
-# Generated competition package staging area
-2026056620-参赛总文件夹/2026056620-02 素材和源码/source_package/

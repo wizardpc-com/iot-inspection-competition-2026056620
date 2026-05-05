@@ -1,62 +1,122 @@
 # Technical Description
 
-## 为什么使用 ROS2
+## 1. 作品概述
 
-ROS2 适合机器人系统的模块化开发。巡检机器人通常包含感知、决策、运动控制、日志记录和可视化等多个模块。使用 ROS2 可以把这些模块拆成独立节点，通过话题进行通信，便于演示、调试和后续替换。
+本项目面向电力巡检场景，使用 ROS2 Humble、Python 和 YOLO 模型构建智能巡检原型。当前版本完成图像输入、裂缝检测、仪表关键部件检测与估算读数、巡检状态判断、模拟运动反馈和结果图保存。
 
-本项目使用 ROS2 Humble 和 Python，是因为 Humble 稳定性好，Python 生态中可以直接调用 Ultralytics YOLO，适合比赛 MVP 快速集成。
+系统不依赖真实摄像头，不使用自定义 msg，不使用 `sensor_msgs/Image` 和 `cv_bridge`。视觉输入和识别结果通过 `std_msgs/String` 承载 JSON 数据。
 
-## 为什么使用模块化节点
-
-本项目把系统拆成五个节点：
-
-- `image_source_node`：负责巡检图片输入
-- `crack_detector_node`：负责裂缝检测
-- `inspection_manager_node`：负责状态判断和控制指令
-- `fake_base_node`：负责模拟底盘响应
-- `meter_stub_node`：负责模拟第二路仪表识别接口
-
-这种拆分可以让每个模块职责清晰。后续替换真实相机、真实底盘或新的 AI 模型时，只需要替换对应节点，不影响其他部分。
-
-## 裂缝检测节点原理
-
-`crack_detector_node` 启动时读取 `model_path` 参数，并使用 `ultralytics.YOLO` 加载 `best.pt`。模型只加载一次，避免每张图片重复初始化带来的延迟和不稳定。
-
-节点订阅 `/inspection/image_path`，从 JSON 中解析图片路径。收到图片后调用：
-
-```python
-model.predict(source=image_path, conf=conf_threshold, save=False, show=False)
-```
-
-推理完成后，节点解析 YOLO 输出框，生成包含 `bbox`、`conf`、`class_id` 和 `class_name` 的 JSON，并保存带检测框的图片到 `outputs/annotated/`。
-
-如果图片不存在、模型不存在或推理失败，节点不会崩溃，而是发布 `detected=false` 的错误结果，保证演示系统继续运行。
-
-## 任务管理节点原理
-
-`inspection_manager_node` 订阅 `/vision/crack_result` 和 `/vision/meter_result`。当前决策规则聚焦裂缝检测：
+## 2. ROS2 节点架构
 
 ```text
-detected == true 且 max_conf >= threshold -> ALERT
+image_source_node
+    ↓ /inspection/image_path
+crack_detector_node
+    ↓ /vision/crack_result
+inspection_manager_node
+    ↓ /inspection/state
+    ↓ /inspection/report
+    ↓ /cmd_vel
+fake_base_node
+
+meter_stub_node 或 meter_detector_node
+    ↓ /vision/meter_result
+inspection_manager_node
+```
+
+节点职责：
+
+- `image_source_node`：从 `demo_images/` 发布图片路径。
+- `crack_detector_node`：加载 `models/crack_best.pt`，完成管道裂缝检测。
+- `meter_stub_node`：默认兼容演示模式，发布稳定的仪表分支结果。
+- `meter_detector_node`：加载 `models/meter_best.pt`，完成仪表关键部件检测与估算读数。
+- `inspection_manager_node`：融合裂缝与仪表分支结果，发布状态、报告和运动指令。
+- `fake_base_node`：订阅 `/cmd_vel` 并打印模拟小车动作。
+
+## 3. 裂缝检测节点
+
+`crack_detector_node` 在启动时加载裂缝模型，只加载一次。节点订阅 `/inspection/image_path`，收到图片路径后调用 Ultralytics YOLO 推理，解析检测框、置信度和类别，并把带框结果图保存到 `outputs/annotated/`。
+
+裂缝检测结果发布到 `/vision/crack_result`。当 `detected=true` 且 `max_conf >= threshold` 时，巡检管理节点进入 `ALERT` 状态。
+
+## 4. 仪表检测与估算读数节点
+
+`meter_detector_node` 是第二路视觉检测分支。该节点订阅 `/inspection/image_path`，对同一张巡检图片执行仪表关键部件检测，并发布 `/vision/meter_result`。
+
+模型信息：
+
+- 模型文件：`models/meter_best.pt`
+- 模型来源：YOLOv5s 训练 100 轮，样例 mAP 0.869
+- 当前能力：检测仪表盘区域、指针、刻度等关键部件
+- 当前输出：检测框、类别、置信度、标注图、估算读数
+
+节点优先使用 `ultralytics.YOLO` 加载模型。若模型不存在或无法加载，节点会发布带 `error` 字段的 `/vision/meter_result`，并保持进程运行，避免影响裂缝检测闭环。
+
+## 5. 仪表读数方法
+
+仪表读数基于 `base/start/end/tip` 四类关键部件的检测框中心点：
+
+1. 以 `base` 的检测框中心作为表盘角度中心。
+2. 计算 `start` 和 `end` 相对 `base` 的角度，得到刻度范围。
+3. 计算 `tip` 相对 `base` 的角度，得到指针位置。
+4. 按 `meter_angle_direction` 计算指针在起止刻度之间的比例 `reading_ratio`。
+5. 将比例映射到 `meter_min_value` 到 `meter_max_value`，得到 `reading_value`。
+
+输出字段包括：
+
+- `reading_status`
+- `reading_value`
+- `reading_unit`
+- `reading_ratio`
+- `reading_method`
+- `reading_reason`
+
+当关键部件缺失时，`reading_status=needs_key_parts`，巡检状态可进入 `CHECK_METER`。
+
+## 6. 仪表状态规则
+
+`meter_detector_node` 根据检测结果给出 `meter_status`：
+
+- `structure_detected`：在 `base/start/end/tip` 等关键类中检测到多数结构。
+- `needs_review`：检测结果较少或置信度不足。
+- `error`：图片、模型或推理过程出现错误。
+
+## 7. 巡检状态管理
+
+`inspection_manager_node` 保持裂缝优先规则：
+
+```text
+裂缝 detected=true 且 max_conf >= threshold -> ALERT
+否则 meter_status == error 或 needs_review -> CHECK_METER
 否则 -> NORMAL
 ```
 
-当状态为 `ALERT` 时，节点发布零速度 `/cmd_vel`，表示停车并请求人工复核。当状态为 `NORMAL` 时，节点发布低速前进指令，表示继续巡检。
+说明：
 
-同时，节点发布两类上层信息：
+- `ALERT` 表示裂缝检测达到阈值，发布停车指令并建议复核。
+- `CHECK_METER` 表示仪表关键部件检测或读数估计需要复核。
+- `NORMAL` 表示当前裂缝与仪表分支无异常状态。
 
-- `/inspection/state`：机器可读 JSON 状态
-- `/inspection/report`：便于比赛展示的人类可读报告
+## 8. Launch 模式
 
-## 当前 MVP 与后续接入关系
+默认模式使用 `meter_stub_node`，保持原有演示闭环稳定：
 
-当前 MVP 使用 `std_msgs/String` 传 JSON 图片路径，而不是直接传图像消息。这是为了降低比赛最后一天的环境风险，避免 `cv_bridge`、图像编码和真实摄像头驱动带来的额外问题。
+```bash
+ros2 launch inspection_mvp inspection_demo.launch.py
+```
 
-后续接入真实小车时，可以逐步替换：
+启用真实仪表关键部件检测与估算读数：
 
-- 真实相机或 K230 图像采集节点替换 `image_source_node`
-- 真实仪表识别模型替换 `meter_stub_node`
-- 真实底盘控制节点替换 `fake_base_node`
-- 保留 `/vision/crack_result`、`/inspection/state`、`/cmd_vel` 等接口
+```bash
+ros2 launch inspection_mvp inspection_demo.launch.py use_meter_stub:=false
+```
 
-这种设计让 MVP 演示和后续工程化之间保持一致的接口边界。
+## 9. 后续扩展
+
+后续可在当前接口基础上继续扩展：
+
+- 接入真实摄像头图像采集。
+- 接入真实小车底盘控制。
+- 根据具体仪表类型优化量程、方向和非线性刻度标定。
+- 在 K230 或其他边缘设备上部署视觉模型。
+- 引入激光雷达定位和路径规划。

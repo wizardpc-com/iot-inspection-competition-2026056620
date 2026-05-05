@@ -1,24 +1,13 @@
 # Topic Interface
 
-本项目不使用自定义 msg，所有视觉与状态信息均通过 `std_msgs/String` 传 JSON。运动控制接口使用标准 `geometry_msgs/Twist`。
+本项目不使用自定义 msg。视觉结果和巡检状态通过 `std_msgs/String` 传 JSON，运动控制接口使用 `geometry_msgs/Twist`。
 
 ## /inspection/image_path
 
 - 类型：`std_msgs/String`
 - 发布者：`image_source_node`
-- 订阅者：`crack_detector_node`
-- 作用：发布待检测图片路径
-
-示例：
-
-```json
-{
-  "station_id": "P001",
-  "image_path": "/abs/path/to/demo_images/picture_1.jpg",
-  "timestamp": "2026-05-05T10:00:00.000000+00:00",
-  "source_type": "demo_image"
-}
-```
+- 订阅者：`crack_detector_node`、`meter_detector_node`
+- 作用：传递巡检图片路径，模拟机器人采集图像
 
 ## /vision/crack_result
 
@@ -27,99 +16,82 @@
 - 订阅者：`inspection_manager_node`
 - 作用：发布管道裂缝检测结果
 
-示例：
-
-```json
-{
-  "station_id": "P001",
-  "image_path": "/abs/path/to/demo_images/picture_1.jpg",
-  "annotated_image_path": "/abs/path/to/outputs/annotated/picture_1_annotated.jpg",
-  "detected": true,
-  "class_name": "pipe_crack",
-  "count": 1,
-  "max_conf": 0.8732,
-  "detections": [
-    {
-      "bbox": [120.5, 88.0, 260.0, 180.5],
-      "conf": 0.8732,
-      "class_id": 0,
-      "class_name": "pipe_crack"
-    }
-  ],
-  "threshold": 0.5,
-  "timestamp": "2026-05-05T10:00:02.000000+00:00"
-}
-```
-
-无裂缝时：
-
-```json
-{
-  "station_id": "P002",
-  "detected": false,
-  "count": 0,
-  "max_conf": 0.0,
-  "detections": [],
-  "threshold": 0.5
-}
-```
-
 ## /vision/meter_result
 
 - 类型：`std_msgs/String`
-- 发布者：`meter_stub_node`
+- 发布者：`meter_stub_node` 或 `meter_detector_node`
 - 订阅者：`inspection_manager_node`
-- 作用：模拟仪表识别结果，占位接口，后续可替换为真实模型
+- 作用：发布仪表关键部件检测与估算读数结果
 
 示例：
 
 ```json
 {
   "station_id": "P001",
+  "image_path": "/abs/path/to/demo_images/meter_1.jpg",
+  "annotated_image_path": "/abs/path/to/outputs/meter_annotated/meter_1_meter.jpg",
   "detected": true,
-  "meter_value": 220.0,
-  "status": "normal",
-  "timestamp": "2026-05-05T10:00:05.000000+00:00"
+  "detector_type": "meter_keypoint_detector",
+  "model_backend": "ultralytics",
+  "count": 4,
+  "class_counts": {
+    "base": 1,
+    "start": 1,
+    "end": 1,
+    "tip": 1
+  },
+  "max_conf": 0.82,
+  "detections": [
+    {
+      "bbox": [100.0, 90.0, 230.0, 220.0],
+      "conf": 0.82,
+      "class_id": 0,
+      "class_name": "base"
+    }
+  ],
+  "meter_status": "structure_detected",
+  "reading_status": "estimated",
+  "reading_value": 63.25,
+  "reading_unit": "unit",
+  "reading_ratio": 0.6325,
+  "reading_method": "keypart_angle_linear_scale",
+  "reading_reason": "start_angle=220.00,end_angle=20.00,tip_angle=85.00,direction=clockwise",
+  "reason": "detected_required_meter_parts=4/4",
+  "timestamp": "2026-05-05T10:00:03.000000+00:00",
+  "error": null
 }
 ```
+
+字段说明：
+
+- `meter_status=structure_detected`：检测到多数关键部件。
+- `meter_status=needs_review`：检测结果较少或置信度不足。
+- `meter_status=error`：模型、图片或推理过程出现错误。
+- `reading_status=estimated`：已根据关键部件几何关系输出估算读数。
+- `reading_status=needs_key_parts`：缺少读数所需关键部件。
 
 ## /inspection/state
 
 - 类型：`std_msgs/String`
 - 发布者：`inspection_manager_node`
-- 订阅者：演示终端、上层系统
-- 作用：发布巡检状态
-
-示例：
-
-```json
-{
-  "state": "ALERT",
-  "station_id": "P001",
-  "reason": "Pipe crack detected, max_conf=0.8732 >= threshold=0.5000",
-  "suggested_action": "stop_robot_and_request_manual_check",
-  "timestamp": "2026-05-05T10:00:03.000000+00:00"
-}
-```
+- 作用：发布当前巡检状态
 
 状态含义：
 
-- `IDLE`：预留状态，表示尚未开始巡检
-- `INSPECTING`：预留状态，表示正在巡检
-- `NORMAL`：未发现超过阈值的裂缝
-- `ALERT`：发现超过阈值的裂缝，需要停车并人工复核
+- `NORMAL`：未发现超过阈值的裂缝，仪表分支无错误或复核提示。
+- `ALERT`：裂缝检测达到阈值，发布停车指令。
+- `CHECK_METER`：仪表关键部件检测或估算读数需要复核。
 
 ## /inspection/report
 
 - 类型：`std_msgs/String`
 - 发布者：`inspection_manager_node`
-- 订阅者：演示终端、报告系统
 - 作用：发布可读巡检报告
 
 示例：
 
 ```text
-[Inspection Report] station=P001 | state=ALERT | crack_count=1 | max_conf=0.8732 | meter_status=normal, meter_value=220.0 | action=stop_robot_and_request_manual_check | annotated_image=/abs/path/to/result.jpg
+[Inspection Report] station=P001 | state=NORMAL | crack_count=0 | max_conf=0.0 | meter_status=structure_detected, reading_status=estimated, reading_value=63.25, reading_unit=unit, meter_reason=detected_required_meter_parts=4/4 | action=continue_inspection | annotated_image=/abs/path/to/result.jpg
 ```
 
 ## /cmd_vel
@@ -131,5 +103,6 @@
 
 规则：
 
-- `ALERT`：`linear.x=0.0`，`angular.z=0.0`，模拟停车
-- `NORMAL`：`linear.x=0.1`，`angular.z=0.0`，模拟低速前进
+- `ALERT`：`linear.x=0.0`，`angular.z=0.0`，模拟停车。
+- `CHECK_METER`：`linear.x=0.0`，`angular.z=0.0`，模拟暂停并复核仪表检测。
+- `NORMAL`：`linear.x=0.1`，`angular.z=0.0`，模拟低速前进。

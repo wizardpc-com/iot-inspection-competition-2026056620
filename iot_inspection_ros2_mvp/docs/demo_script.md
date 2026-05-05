@@ -1,26 +1,28 @@
 # Demo Script
 
-本脚本适合组织 5 到 8 分钟比赛演示视频。
+本脚本用于组织 5-8 分钟作品演示视频。
 
-## 1. 项目背景
+## 0:00-0:40 项目背景
 
-介绍电力场景中的巡检需求：管道、设备外观、仪表状态都需要稳定巡检。传统人工巡检效率低、记录不统一，机器人巡检可以把图像采集、AI 识别、状态判断和运动控制串成闭环。
+介绍电力巡检中管道裂缝、设备外观和仪表状态识别需求。说明当前系统聚焦 ROS2 仿真闭环和 AI 视觉检测接入。
 
-## 2. 系统架构
+## 0:40-1:20 系统方案
 
-展示 ROS2 节点图或架构图，说明系统由五个节点组成：
+展示系统架构：图片输入、裂缝检测、仪表关键部件检测与估算读数、巡检状态管理、模拟运动反馈。
 
-- 图片输入节点
-- 裂缝检测节点
-- 巡检管理节点
-- 模拟底盘节点
-- 仪表识别占位节点
+## 1:20-2:10 ROS2 节点架构
 
-强调本 MVP 不依赖真实摄像头，使用图片路径消息完成稳定演示。
+展示节点和话题：
 
-## 3. ROS2 节点启动
+- `image_source_node`
+- `crack_detector_node`
+- `meter_stub_node` 或 `meter_detector_node`
+- `inspection_manager_node`
+- `fake_base_node`
 
-打开终端，执行：
+## 2:10-3:20 系统启动
+
+默认兼容演示模式：
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -30,19 +32,13 @@ source install/setup.bash
 ros2 launch inspection_mvp inspection_demo.launch.py
 ```
 
-讲解启动日志：YOLO 模型加载、图片目录读取、管理节点和模拟底盘启动。
-
-## 4. 图片巡检输入
-
-展示 `demo_images/` 目录中的图片。说明 `image_source_node` 每 2 秒发布一张图片路径到 `/inspection/image_path`，JSON 中包含站点编号、绝对图片路径、时间戳和输入类型。
-
-可执行：
+启用真实仪表关键部件检测与估算读数：
 
 ```bash
-ros2 topic echo /inspection/image_path
+ros2 launch inspection_mvp inspection_demo.launch.py use_meter_stub:=false
 ```
 
-## 5. 裂缝识别
+## 3:20-4:20 裂缝识别结果
 
 展示 `/vision/crack_result`：
 
@@ -50,48 +46,37 @@ ros2 topic echo /inspection/image_path
 ros2 topic echo /vision/crack_result
 ```
 
-说明 `crack_detector_node` 收到图片路径后调用 YOLO 模型推理，输出检测框、置信度、数量、最大置信度和结果图路径。推理结果图保存到 `outputs/annotated/`。
+展示 `outputs/annotated/` 中带裂缝框的结果图。
 
-## 6. ALERT 状态反馈
+## 4:20-5:20 仪表检测与读数
 
-展示 `/inspection/state`：
+展示 `/vision/meter_result`：
+
+```bash
+ros2 topic echo /vision/meter_result
+```
+
+说明当前仪表分支检测仪表盘区域、指针、刻度等关键部件，保存结果到 `outputs/meter_annotated/`，并根据 `base/start/end/tip` 的角度关系输出估算读数。
+
+## 5:20-6:20 巡检状态与运动反馈
+
+展示：
 
 ```bash
 ros2 topic echo /inspection/state
-```
-
-说明当 `detected=true` 且 `max_conf >= conf_threshold` 时，巡检状态变为 `ALERT`；否则为 `NORMAL`。即使没有检测到裂缝，也会输出稳定的 NORMAL 结果。
-
-## 7. 小车停止指令
-
-展示 `/cmd_vel` 和 `fake_base_node` 日志：
-
-```bash
+ros2 topic echo /inspection/report
 ros2 topic echo /cmd_vel
 ```
 
-讲解 `ALERT` 时系统发布 `linear.x=0.0`、`angular.z=0.0`，模拟停车；`NORMAL` 时发布 `linear.x=0.1`，模拟继续巡检。
+说明裂缝达到阈值时进入 `ALERT`，仪表检测或读数需要复核时进入 `CHECK_METER`，`fake_base_node` 会打印模拟小车停止或前进。
 
-## 8. 结果图和日志展示
+## 6:20-7:20 结果图与扩展
 
-打开 `outputs/annotated/`，展示带检测框的结果图。终端中同时展示：
+展示：
 
-- YOLO 推理日志
-- 巡检报告日志
-- 模拟小车前进或停止日志
+- `outputs/annotated/`
+- `outputs/meter_annotated/`
+- 终端日志
+- 节点图或 `rqt_graph`
 
-可执行：
-
-```bash
-ros2 topic echo /inspection/report
-```
-
-## 9. 后续扩展
-
-说明当前系统是最后一天稳定优先的 MVP，后续可以扩展：
-
-- 将图片路径输入替换为真实相机采集节点
-- 将 `meter_stub_node` 替换为真实仪表识别模型
-- 接入真实底盘控制器
-- 接入 K230 或边缘计算设备
-- 接入数据库和 Web 可视化平台
+总结当前完成裂缝检测闭环和仪表关键部件检测与估算读数接入。后续可针对不同仪表类型配置量程、方向和刻度标定。

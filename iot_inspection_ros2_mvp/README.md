@@ -1,68 +1,54 @@
 # 电力场景智能机器人巡检 ROS2 MVP
 
-这是一个面向比赛演示的最小可运行 ROS2 Humble + Python + YOLO 项目。系统不依赖真实摄像头，不使用自定义 msg，不使用 `sensor_msgs/Image` 和 `cv_bridge`，而是用 `std_msgs/String` 传递 JSON 格式的图片路径，降低最后一天集成风险。
+本项目是面向物联网应用类比赛演示的 ROS2 Humble + Python + YOLO 原型系统。当前版本不依赖真实摄像头，不使用自定义 msg，不使用 `sensor_msgs/Image` 和 `cv_bridge`，通过 `std_msgs/String` 传递 JSON 格式的图片路径和识别结果。
+
+当前系统接入两路视觉分支：
+
+- 管道裂缝检测：`crack_detector_node` 加载裂缝模型并发布 `/vision/crack_result`。
+- 仪表检测与估算读数：`meter_detector_node` 加载仪表模型，检测仪表关键部件，并基于 `base/start/end/tip` 的几何关系输出估算读数。默认仍可使用 `meter_stub_node` 作为兼容演示模式。
 
 ## 系统闭环
 
 1. `image_source_node` 从 `demo_images/` 循环发布巡检图片路径。
-2. `crack_detector_node` 加载 `models/best.pt`，对图片进行管道裂缝检测，并保存带框结果图。
-3. `inspection_manager_node` 根据检测结果判断 `NORMAL` 或 `ALERT`。
-4. `ALERT` 时发布 `/cmd_vel` 零速度停车指令，`NORMAL` 时发布低速前进指令。
-5. `fake_base_node` 打印模拟小车动作，证明运动控制接口已预留。
-6. `meter_stub_node` 模拟仪表识别结果，证明第二路 AI 视觉接口已预留。
+2. `crack_detector_node` 加载 `models/crack_best.pt`，进行管道裂缝检测，并保存带框结果图。
+3. `meter_stub_node` 默认发布兼容仪表结果；传入 `use_meter_stub:=false` 后由 `meter_detector_node` 执行仪表关键部件检测与估算读数。
+4. `inspection_manager_node` 根据裂缝结果和仪表检测状态发布 `/inspection/state` 与 `/inspection/report`。
+5. 裂缝达到阈值时进入 `ALERT` 并发布停车 `/cmd_vel`；仪表检测失败或需复核时进入 `CHECK_METER`。
+6. `fake_base_node` 订阅 `/cmd_vel`，打印模拟小车前进、停止或转向。
 
-## 文件结构
+## 模型和图片放置
 
-```text
-iot_inspection_ros2_mvp/
-├── README.md
-├── requirements.txt
-├── docs/
-├── demo_images/
-├── models/
-├── outputs/
-└── ros2_ws/
-    └── src/
-        └── inspection_mvp/
-            ├── package.xml
-            ├── setup.py
-            ├── setup.cfg
-            ├── inspection_mvp/
-            ├── launch/
-            └── config/
-```
-
-## 环境安装
-
-先安装 ROS2 Humble，并确认可以使用：
-
-```bash
-source /opt/ros/humble/setup.bash
-ros2 --version
-```
-
-安装 Python 依赖：
-
-```bash
-cd iot_inspection_ros2_mvp
-python3 -m pip install -r requirements.txt
-```
-
-## 放置模型和图片
-
-把训练好的 YOLO 模型放到：
+裂缝模型：
 
 ```text
-iot_inspection_ros2_mvp/models/best.pt
+iot_inspection_ros2_mvp/models/crack_best.pt
 ```
 
-把演示图片放到：
+仪表关键部件检测模型：
+
+```text
+iot_inspection_ros2_mvp/models/meter_best.pt
+```
+
+可选仪表 last 模型：
+
+```text
+iot_inspection_ros2_mvp/models/meter_last.pt
+```
+
+演示图片：
 
 ```text
 iot_inspection_ros2_mvp/demo_images/
 ```
 
-支持 `.jpg`、`.jpeg`、`.png`。
+## 环境安装
+
+```bash
+source /opt/ros/humble/setup.bash
+cd iot_inspection_ros2_mvp
+python3 -m pip install -r requirements.txt
+```
 
 ## 构建
 
@@ -75,81 +61,70 @@ source install/setup.bash
 
 ## 运行
 
+默认兼容演示模式，使用 `meter_stub_node`：
+
 ```bash
 ros2 launch inspection_mvp inspection_demo.launch.py
 ```
 
-默认配置在：
+启用真实仪表关键部件检测与估算读数：
+
+```bash
+ros2 launch inspection_mvp inspection_demo.launch.py use_meter_stub:=false
+```
+
+## 关键配置
+
+配置文件：
 
 ```text
 ros2_ws/src/inspection_mvp/config/demo.yaml
 ```
 
-如果需要调整模型、图片或输出路径，优先修改这个配置文件。默认路径均相对于 `ros2_ws` 运行目录：
+仪表读数相关参数：
 
 ```yaml
-image_dir: "../demo_images"
-model_path: "../models/best.pt"
-output_dir: "../outputs/annotated"
-conf_threshold: 0.5
-publish_interval: 2.0
+meter_min_value: 0.0
+meter_max_value: 100.0
+meter_unit: "unit"
+meter_angle_direction: "clockwise"
+meter_required_classes: ["base", "start", "end", "tip"]
 ```
+
+读数方法：以 `base` 为圆心，计算 `start` 到 `end` 的刻度角度范围，再计算 `tip` 的指针角度比例，映射到 `meter_min_value` 到 `meter_max_value` 的量程。
 
 ## 查看话题
 
 ```bash
 ros2 topic list
 ros2 topic echo /vision/crack_result
+ros2 topic echo /vision/meter_result
 ros2 topic echo /inspection/state
 ros2 topic echo /inspection/report
 ros2 topic echo /cmd_vel
 ```
 
-## 展示节点关系
+## 输出目录
+
+裂缝检测标注图：
+
+```text
+outputs/annotated/
+```
+
+仪表关键部件检测标注图：
+
+```text
+outputs/meter_annotated/
+```
+
+## 辅助检查
 
 ```bash
-rqt_graph
+python scripts/check_meter_assets.py
+python scripts/test_meter_node.py --image demo_images/crack_1.jpg --model models/meter_best.pt
 ```
 
-建议录屏时同时展示：
+## 当前能力边界
 
-- 终端启动日志
-- `/vision/crack_result`
-- `/inspection/state`
-- `/inspection/report`
-- `outputs/annotated/` 中生成的结果图
-- `rqt_graph` 节点关系图
-
-## 常见错误
-
-模型不存在：
-
-```text
-YOLO model file not found
-```
-
-处理方式：确认 `models/best.pt` 已放好，或者在 `demo.yaml` 修改 `model_path`。
-
-图片目录为空：
-
-```text
-No demo images found
-```
-
-处理方式：把 `.jpg/.jpeg/.png` 图片放入 `demo_images/`。
-
-找不到 ROS2 包：
-
-```text
-Package 'inspection_mvp' not found
-```
-
-处理方式：确认已经在 `ros2_ws` 下执行 `colcon build`，并执行 `source install/setup.bash`。
-
-推理窗口阻塞：
-
-本项目没有使用 `show=True`，不会打开阻塞窗口。检测结果保存到 `outputs/annotated/`。
-
-## MVP 边界
-
-本项目只做比赛演示闭环，不包含训练逻辑、不修改 `data.yaml`、不使用真实摄像头、不引入 Nav2、无人机或机械臂逻辑。后续可把图片路径输入替换为真实相机采集模块，也可把 `meter_stub_node` 替换为真实仪表识别模型。
+当前版本完成 ROS2 仿真闭环、裂缝检测模型接入、仪表关键部件检测与估算读数分支接入、运动反馈接口验证。真实摄像头采集、真实小车底盘、K230 实机部署、激光雷达定位和路径规划属于后续扩展方向。

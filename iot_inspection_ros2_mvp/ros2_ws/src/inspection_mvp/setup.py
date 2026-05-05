@@ -26,6 +26,7 @@ setup(
             "inspection_manager_node = inspection_mvp.inspection_manager_node:main",
             "fake_base_node = inspection_mvp.fake_base_node:main",
             "meter_stub_node = inspection_mvp.meter_stub_node:main",
+            "meter_detector_node = inspection_mvp.meter_detector_node:main",
         ],
     },
 )
