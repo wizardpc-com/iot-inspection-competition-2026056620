@@ -11,24 +11,10 @@ crack_detector_node:
     conf_threshold: 0.5
     output_dir: "../outputs/annotated"
 
-inspection_manager_node:
-  ros__parameters:
-    normal_speed: 0.1
-    use_meter_stub: true
-
-meter_stub_node:
-  ros__parameters:
-    use_meter_stub: true
-    publish_interval: 5.0
-    station_id: "P001"
-    meter_value: 220.0
-    status: "normal"
-
 meter_detector_node:
   ros__parameters:
-    use_meter_stub: true
     meter_model_path: "../models/meter_best.pt"
-    meter_last_model_path: "../models/meter_last.pt"
+    meter_yolov5_detect_script: "../models/yolov5/detect.py"
     meter_conf_threshold: 0.5
     meter_output_dir: "../outputs/meter_annotated"
     meter_min_value: 0.0
@@ -40,3 +26,13 @@ meter_detector_node:
       - "start"
       - "end"
       - "tip"
+    meter_class_names:
+      - "base"
+      - "start"
+      - "end"
+      - "tip"
+
+inspection_manager_node:
+  ros__parameters:
+    normal_speed: 0.1
+    state_publish_interval: 2.0

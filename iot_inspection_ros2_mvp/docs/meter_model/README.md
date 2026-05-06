@@ -1,31 +1,12 @@
-# Meter Key-Part Model
+# 仪表模型说明
 
-This directory documents the meter key-part detection and reading-estimation branch.
+当前仪表分支使用 `models/meter_best.pt`。该权重是 YOLOv5 旧格式模型，因此由 `meter_detector_node` 通过本地 YOLOv5 `detect.py` 调用。模型用于检测仪表关键部件，当前配置关注：
 
-Model placement:
+- `base`
+- `start`
+- `end`
+- `tip`
 
-```text
-iot_inspection_ros2_mvp/models/meter_best.pt
-```
+节点会保存标注图到 `outputs/meter_annotated/`，解析 YOLOv5 `labels/*.txt`，并发布 `/vision/meter_result`。当上述关键部件足够完整时，节点根据角度比例输出估算读数。
 
-Optional last checkpoint:
-
-```text
-iot_inspection_ros2_mvp/models/meter_last.pt
-```
-
-Known model information:
-
-- Base model: YOLOv5s
-- Training: 100 epochs
-- Sample mAP: 0.869
-- Current capability: detect meter area and key parts such as pointer and scale regions
-- Current ROS2 integration: publish detection boxes, confidence values, annotated image path, and estimated reading on `/vision/meter_result`
-
-Original command reference:
-
-```bash
-python detect.py --weights best.pt --source <image_path> --save-txt --save-conf
-```
-
-Reading estimation uses detected `base`, `start`, `end`, and `tip` key parts. The computed pointer ratio is mapped to the configured range in `config/demo.yaml`.
+该读数是比赛原型中的估算结果，后续可以结合具体仪表量程、刻度方向、非线性刻度和现场标定继续提升。

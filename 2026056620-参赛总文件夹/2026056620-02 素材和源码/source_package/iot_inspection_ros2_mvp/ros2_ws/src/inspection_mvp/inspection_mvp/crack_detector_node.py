@@ -56,7 +56,7 @@ class CrackDetectorNode(Node):
         if not self.model_path.exists():
             self.get_logger().error(
                 f"YOLO model file not found: {self.model_path}. "
-                "Put best.pt under models/best.pt or override model_path."
+                "Put the crack model at models/crack_best.pt or override model_path."
             )
             return
 
@@ -197,9 +197,8 @@ class CrackDetectorNode(Node):
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.publisher.publish(msg)
 
-        status = "ALERT" if detected else "NORMAL"
         self.get_logger().info(
-            f"Published crack result. station_id={station_id}, status={status}, "
+            f"Published crack result. station_id={station_id}, detected={detected}, "
             f"count={len(detections)}, max_conf={max_conf:.4f}"
         )
 

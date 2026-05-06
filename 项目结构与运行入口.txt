@@ -1,0 +1,46 @@
+电力场景下的智能机器人巡检系统 - 项目结构与运行入口
+
+1. 核心运行项目
+   iot_inspection_ros2_mvp/
+
+2. ROS2 包源码
+   iot_inspection_ros2_mvp/ros2_ws/src/inspection_mvp/
+
+3. 模型目录
+   iot_inspection_ros2_mvp/models/
+   - crack_best.pt：裂缝检测模型
+   - meter_best.pt：仪表关键部件检测与估算读数模型，YOLOv5 旧格式权重
+   - yolov5/detect.py：仪表模型兼容推理入口
+
+4. 测试图片目录
+   iot_inspection_ros2_mvp/demo_images/
+   - 可同时放裂缝图片和仪表图片
+   - 两个模型节点都会接收同一批图片并分别输出结果
+
+5. 输出目录
+   iot_inspection_ros2_mvp/outputs/annotated/
+   iot_inspection_ros2_mvp/outputs/meter_annotated/
+
+6. 运行命令
+   cd /mnt/c/Users/Lenovo/Desktop/model/iot_inspection_ros2_mvp/ros2_ws
+   source /opt/ros/humble/setup.bash
+   colcon build
+   source install/setup.bash
+   ros2 launch inspection_mvp inspection_demo.launch.py
+
+7. 观察命令
+   ros2 topic list
+   ros2 topic echo /vision/crack_result --once
+   ros2 topic echo /vision/meter_result --once
+   ros2 topic echo /inspection/state --once
+   ros2 topic echo /inspection/report --once
+   ros2 topic echo /cmd_vel --once
+
+8. 参赛材料目录
+   2026056620-参赛总文件夹/
+
+9. 脚本目录
+   scripts/
+   - create_submission_workspace.py：生成参赛材料目录
+   - package_source.py：打包素材源码
+   - check_submission_tree.py：检查提交目录

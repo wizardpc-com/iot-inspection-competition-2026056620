@@ -1,90 +1,46 @@
 # Meter Integration Checklist
 
-## Files To Check
+## 文件检查
 
-- `models/crack_best.pt`
-- `models/meter_best.pt`
-- `ros2_ws/src/inspection_mvp/inspection_mvp/meter_detector_node.py`
-- `ros2_ws/src/inspection_mvp/inspection_mvp/meter_stub_node.py`
-- `ros2_ws/src/inspection_mvp/launch/inspection_demo.launch.py`
-- `ros2_ws/src/inspection_mvp/config/demo.yaml`
-- `outputs/meter_annotated/`
+- `models/meter_best.pt` 存在。
+- `models/yolov5/detect.py` 存在。
+- `demo_images/` 中有仪表测试图片。
+- `outputs/meter_annotated/` 存在。
+- `ros2_ws/src/inspection_mvp/config/demo.yaml` 中 `meter_model_path` 指向 `../models/meter_best.pt`。
+- `ros2_ws/src/inspection_mvp/config/demo.yaml` 中 `meter_yolov5_detect_script` 指向 `../models/yolov5/detect.py`。
 
-## Commands To Run
-
-Check model assets:
+## 单独测试仪表模型
 
 ```bash
 cd iot_inspection_ros2_mvp
-python scripts/check_meter_assets.py
+python3 scripts/check_meter_assets.py
+python3 scripts/test_meter_node.py --image demo_images/你的仪表图片.jpg
 ```
 
-Build ROS2 package:
+成功时应看到 JSON 输出，包含 `detections`、`reading_status`、`reading_value` 和 `annotated_image_path`。
+
+## ROS2 联调
 
 ```bash
 source /opt/ros/humble/setup.bash
 cd iot_inspection_ros2_mvp/ros2_ws
 colcon build
 source install/setup.bash
-```
-
-Run default compatible mode:
-
-```bash
 ros2 launch inspection_mvp inspection_demo.launch.py
 ```
 
-Run real meter detection and reading mode:
+另开终端查看：
 
 ```bash
-ros2 launch inspection_mvp inspection_demo.launch.py use_meter_stub:=false
+source /opt/ros/humble/setup.bash
+cd iot_inspection_ros2_mvp/ros2_ws
+source install/setup.bash
+ros2 topic echo /vision/meter_result --once
 ```
 
-Watch meter output:
+成功时应看到：
 
-```bash
-ros2 topic echo /vision/meter_result
-```
-
-Standalone meter model test:
-
-```bash
-cd iot_inspection_ros2_mvp
-python scripts/test_meter_node.py --image demo_images/crack_1.jpg --model models/meter_best.pt
-```
-
-## Successful Logs
-
-Default mode should show:
-
-```text
-Meter stub ready
-Published meter stub
-```
-
-Real meter mode should show:
-
-```text
-Meter key-part model loaded with ultralytics
-Received meter inspection image
-Meter annotated result saved
-Published meter result
-```
-
-Successful reading output should include:
-
-```json
-{
-  "reading_status": "estimated",
-  "reading_value": 63.25,
-  "reading_ratio": 0.6325,
-  "reading_method": "keypart_angle_linear_scale"
-}
-```
-
-## Expected Boundaries
-
-- Crack detection remains available in both meter modes.
-- `meter_stub_node` remains available as fallback.
-- `meter_detector_node` detects meter structure and key parts.
-- Reading is estimated from key-part geometry and configurable meter range.
+- `model_backend=yolov5_detect_py`
+- `annotated_save_ok=true`
+- `meter_status=structure_detected` 或 `needs_review`
+- `annotated_image_path` 指向 `outputs/meter_annotated/` 下的图片

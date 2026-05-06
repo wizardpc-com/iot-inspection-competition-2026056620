@@ -21,3 +21,15 @@ iot_inspection_ros2_mvp/runs/
 # OS
 Thumbs.db
 .DS_Store
+
+# Local demo images for recording and testing
+iot_inspection_ros2_mvp/demo_images/**/*.jpg
+iot_inspection_ros2_mvp/demo_images/**/*.jpeg
+iot_inspection_ros2_mvp/demo_images/**/*.png
+iot_inspection_ros2_mvp/demo_images/**/*.bmp
+iot_inspection_ros2_mvp/demo_images/**/*.gif
+iot_inspection_ros2_mvp/demo_images/**/*.webp
+
+# Optional third-party YOLOv5 runtime cloned locally for meter inference
+iot_inspection_ros2_mvp/models/yolov5/*
+!iot_inspection_ros2_mvp/models/yolov5/README.md

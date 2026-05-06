@@ -1,0 +1,51 @@
+1. 展示运行环境：打开 WSL Ubuntu 22.04 终端
+
+2. 进入项目目录：cd /mnt/c/Users/Lenovo/Desktop/model/iot_inspection_ros2_mvp
+
+3. 展示模型文件：ls models
+
+4. 展示测试图片：ls demo_images
+
+5. 安装或确认依赖：python3 -m pip install -r requirements.txt
+
+6. 单独检查仪表模型文件：python3 scripts/check_meter_assets.py
+
+7. 可选，单独测试一张仪表图片：python3 scripts/test_meter_node.py --image demo_images/你的仪表图片.jpg
+
+8. 加载 ROS2 Humble 环境：source /opt/ros/humble/setup.bash
+
+9. 进入 ROS2 工作区：cd ros2_ws
+
+10. 构建 ROS2 项目：colcon build
+
+11. 加载当前工作区：source install/setup.bash
+
+12. 启动演示系统，同时运行裂缝模型和仪表模型：ros2 launch inspection_mvp inspection_demo.launch.py
+
+13. 新开一个 WSL 终端，用于观察 ROS2 话题输出
+
+14. 第二个终端进入工作区：cd /mnt/c/Users/Lenovo/Desktop/model/iot_inspection_ros2_mvp/ros2_ws
+
+15. 第二个终端加载 ROS2：source /opt/ros/humble/setup.bash
+
+16. 第二个终端加载当前工作区：source install/setup.bash
+
+17. 展示系统话题列表：ros2 topic list
+
+18. 展示图片路径输入：ros2 topic echo /inspection/image_path --once
+
+19. 展示裂缝识别 JSON 结果：ros2 topic echo /vision/crack_result --once
+
+20. 展示仪表识别 JSON 结果：ros2 topic echo /vision/meter_result --once
+
+21. 展示巡检状态汇总：ros2 topic echo /inspection/state --once
+
+22. 展示可读巡检报告：ros2 topic echo /inspection/report --once
+
+23. 展示模拟小车持续前进指令：ros2 topic echo /cmd_vel --once
+
+24. 展示裂缝标注结果图目录：ls ../outputs/annotated
+
+25. 展示仪表标注结果图目录：ls ../outputs/meter_annotated
+
+26. 录屏结束，停止演示系统：Ctrl+C

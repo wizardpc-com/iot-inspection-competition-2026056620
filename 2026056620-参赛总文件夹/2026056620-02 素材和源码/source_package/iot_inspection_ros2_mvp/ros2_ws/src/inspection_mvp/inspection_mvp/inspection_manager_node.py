@@ -8,14 +8,18 @@ from std_msgs.msg import String
 
 
 class InspectionManagerNode(Node):
-    """Convert vision results into inspection state, reports, and motion commands."""
+    """Summarize vision results and keep the simulated robot moving forward."""
 
     def __init__(self):
         super().__init__("inspection_manager_node")
         self.declare_parameter("normal_speed", 0.1)
-        self.declare_parameter("use_meter_stub", True)
+        self.declare_parameter("state_publish_interval", 2.0)
+
         self.normal_speed = (
             self.get_parameter("normal_speed").get_parameter_value().double_value
+        )
+        self.state_publish_interval = (
+            self.get_parameter("state_publish_interval").get_parameter_value().double_value
         )
 
         self.state_pub = self.create_publisher(String, "/inspection/state", 10)
@@ -28,118 +32,132 @@ class InspectionManagerNode(Node):
         self.meter_sub = self.create_subscription(
             String, "/vision/meter_result", self._on_meter_result, 10
         )
+
+        self.latest_crack = None
         self.latest_meter = None
+        self.latest_state = self._make_state(
+            state="IDLE",
+            station_id="UNKNOWN",
+            reason="waiting_for_image_and_vision_results",
+            suggested_action="continue_forward_demo",
+        )
+        self.latest_report = self._build_report()
+        self.timer = self.create_timer(
+            self.state_publish_interval, self._publish_status_heartbeat
+        )
 
         self.get_logger().info(
-            f"Inspection manager ready. normal_speed={self.normal_speed} m/s"
+            "Inspection manager ready. "
+            f"normal_speed={self.normal_speed} m/s, "
+            "current demo policy=always_continue_forward"
         )
+
+    def _on_crack_result(self, msg):
+        try:
+            self.latest_crack = json.loads(msg.data)
+        except json.JSONDecodeError as exc:
+            self.get_logger().error(f"Invalid JSON on /vision/crack_result: {exc}")
+            return
+        self._update_and_publish("crack_result_received")
 
     def _on_meter_result(self, msg):
         try:
             self.latest_meter = json.loads(msg.data)
-            meter_status = self._meter_status(self.latest_meter)
-            self.get_logger().info(
-                "Meter result received. "
-                f"station_id={self.latest_meter.get('station_id')}, "
-                f"meter_status={meter_status}, "
-                f"reading_status={self.latest_meter.get('reading_status', 'not_available')}"
-            )
         except json.JSONDecodeError as exc:
             self.get_logger().error(f"Invalid JSON on /vision/meter_result: {exc}")
-
-    def _on_crack_result(self, msg):
-        try:
-            result = json.loads(msg.data)
-        except json.JSONDecodeError as exc:
-            self.get_logger().error(f"Invalid JSON on /vision/crack_result: {exc}")
             return
+        self._update_and_publish("meter_result_received")
 
-        station_id = result.get("station_id", "UNKNOWN")
-        detected = bool(result.get("detected", False))
-        max_conf = float(result.get("max_conf", 0.0))
-        threshold = float(result.get("threshold", 0.5))
+    def _update_and_publish(self, reason):
+        station_id = self._latest_station_id()
+        state = "NORMAL" if self.latest_crack or self.latest_meter else "IDLE"
+        self.latest_state = self._make_state(
+            state=state,
+            station_id=station_id,
+            reason=reason,
+            suggested_action="continue_forward_demo",
+        )
+        self.latest_report = self._build_report()
+        self._publish_state(self.latest_state)
+        self._publish_report(self.latest_report)
+        self._publish_forward_cmd()
+        self.get_logger().info(
+            f"Inspection summary published. station_id={station_id}, state={state}, "
+            "motion=forward"
+        )
 
-        crack_alert = detected and max_conf >= threshold
-        meter_status = self._meter_status(self.latest_meter)
-        if crack_alert:
-            state = "ALERT"
-            reason = f"Pipe crack detected, max_conf={max_conf:.4f} >= threshold={threshold:.4f}"
-            suggested_action = "stop_robot_and_request_manual_check"
-            cmd = self._make_twist(0.0, 0.0)
-        elif meter_status in {"error", "needs_review"}:
-            state = "CHECK_METER"
-            reason = f"Meter key-part detection status requires review: meter_status={meter_status}"
-            suggested_action = "pause_and_review_meter_detection"
-            cmd = self._make_twist(0.0, 0.0)
-        else:
-            state = "NORMAL"
-            reason = f"No crack above threshold, max_conf={max_conf:.4f}, threshold={threshold:.4f}"
-            suggested_action = "continue_inspection"
-            cmd = self._make_twist(self.normal_speed, 0.0)
+    def _latest_station_id(self):
+        if self.latest_crack:
+            return self.latest_crack.get("station_id", "UNKNOWN")
+        if self.latest_meter:
+            return self.latest_meter.get("station_id", "UNKNOWN")
+        return "UNKNOWN"
 
-        state_payload = {
+    @staticmethod
+    def _make_state(state, station_id, reason, suggested_action):
+        return {
             "state": state,
             "station_id": station_id,
             "reason": reason,
             "suggested_action": suggested_action,
+            "motion_policy": "always_forward_in_current_demo",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        self._publish_state(state_payload)
-        self._publish_report(result, state_payload)
-        self.cmd_pub.publish(cmd)
 
-        self.get_logger().info(
-            f"Inspection decision published. station_id={station_id}, "
-            f"state={state}, suggested_action={suggested_action}"
+    def _crack_summary(self):
+        if not self.latest_crack:
+            return "crack=not_available"
+        return (
+            f"crack_detected={self.latest_crack.get('detected', False)}, "
+            f"crack_count={self.latest_crack.get('count', 0)}, "
+            f"crack_max_conf={self.latest_crack.get('max_conf', 0.0)}, "
+            f"crack_image={self.latest_crack.get('annotated_image_path', '')}"
         )
 
-    @staticmethod
-    def _make_twist(linear_x, angular_z):
-        msg = Twist()
-        msg.linear.x = float(linear_x)
-        msg.angular.z = float(angular_z)
-        return msg
+    def _meter_summary(self):
+        if not self.latest_meter:
+            return "meter=not_available"
+        return (
+            f"meter_status={self.latest_meter.get('meter_status', 'not_available')}, "
+            f"meter_count={self.latest_meter.get('count', 0)}, "
+            f"meter_max_conf={self.latest_meter.get('max_conf', 0.0)}, "
+            f"reading_status={self.latest_meter.get('reading_status', 'not_available')}, "
+            f"reading_value={self.latest_meter.get('reading_value', None)}, "
+            f"reading_unit={self.latest_meter.get('reading_unit', '')}, "
+            f"meter_image={self.latest_meter.get('annotated_image_path', '')}"
+        )
+
+    def _build_report(self):
+        return (
+            f"[Inspection Report] station={self.latest_state['station_id']} | "
+            f"state={self.latest_state['state']} | "
+            f"{self._crack_summary()} | "
+            f"{self._meter_summary()} | "
+            "action=continue_forward_demo"
+        )
 
     def _publish_state(self, payload):
         msg = String()
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.state_pub.publish(msg)
 
-    @staticmethod
-    def _meter_status(meter_result):
-        if not meter_result:
-            return "not_available"
-        return meter_result.get("meter_status") or meter_result.get("status") or "not_available"
-
-    def _publish_report(self, crack_result, state_payload):
-        meter_text = "meter=not_available"
-        if self.latest_meter:
-            meter_status = self._meter_status(self.latest_meter)
-            meter_reason = self.latest_meter.get("reason", "")
-            reading_status = self.latest_meter.get("reading_status", "not_available")
-            reading_value = self.latest_meter.get("reading_value", None)
-            reading_unit = self.latest_meter.get("reading_unit", "")
-            meter_text = (
-                f"meter_status={meter_status}, "
-                f"reading_status={reading_status}, "
-                f"reading_value={reading_value}, "
-                f"reading_unit={reading_unit}, "
-                f"meter_reason={meter_reason}"
-            )
-
-        report = (
-            f"[Inspection Report] station={state_payload['station_id']} | "
-            f"state={state_payload['state']} | "
-            f"crack_count={crack_result.get('count', 0)} | "
-            f"max_conf={crack_result.get('max_conf', 0.0)} | "
-            f"{meter_text} | "
-            f"action={state_payload['suggested_action']} | "
-            f"annotated_image={crack_result.get('annotated_image_path', '')}"
-        )
+    def _publish_report(self, report):
         msg = String()
         msg.data = report
         self.report_pub.publish(msg)
         self.get_logger().info(report)
+
+    def _publish_forward_cmd(self):
+        cmd = Twist()
+        cmd.linear.x = float(self.normal_speed)
+        cmd.angular.z = 0.0
+        self.cmd_pub.publish(cmd)
+
+    def _publish_status_heartbeat(self):
+        self.latest_state["timestamp"] = datetime.now(timezone.utc).isoformat()
+        self._publish_state(self.latest_state)
+        self._publish_report(self.latest_report)
+        self._publish_forward_cmd()
 
 
 def main(args=None):

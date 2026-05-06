@@ -1,17 +1,3 @@
 # Demo Images
 
-Put demo inspection images here before running the system.
-
-Supported formats:
-
-- `.jpg`
-- `.jpeg`
-- `.png`
-
-Example:
-
-```text
-demo_images/
-├── picture_1.jpg
-└── picture_2.jpg
-```
+本目录用于放置演示图片。裂缝图片和仪表图片可以放在同一目录，系统会循环发布图片路径。录屏时建议按展示目标分批放置图片，以便裂缝检测和仪表检测输出更清晰。
